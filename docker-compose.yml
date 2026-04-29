@@ -1,0 +1,49 @@
+# Dev stack: Vite (5173) proxies /api to FastAPI (8000).
+# Copy .env.example to .env and set LLM keys before analysis features work.
+# After changing pyproject.toml / uv.lock: docker compose build --no-cache backend
+# To reset the in-container Python venv volume: docker compose down -v
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - backend_venv:/app/.venv
+      - ./data:/app/data
+      - ./.cache:/app/.cache
+    command:
+      - uv
+      - run
+      - uvicorn
+      - backend.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    environment:
+      BACKEND_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+volumes:
+  backend_venv:
+  frontend_node_modules:

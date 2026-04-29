@@ -1,0 +1,24 @@
+---
+description: Keep public class methods before private helpers
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Public Methods First
+
+When organizing class methods:
+
+- Place publicly exposed methods first.
+- Place internal/private helpers (for example names starting with `_`) after all public methods.
+- Keep behavior unchanged when doing this reordering; it is a structure-only refactor.
+
+Example:
+
+```python
+class Example:
+    def public_api(self) -> None:
+        ...
+
+    def _internal_helper(self) -> None:
+        ...
+```

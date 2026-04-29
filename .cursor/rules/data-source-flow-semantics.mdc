@@ -1,0 +1,39 @@
+---
+description: >-
+  Before processing external data feeds, determine whether returned amounts are
+  cumulative (YTD / fiscal YTD) or single-period (e.g. one quarter), and align
+  code with PeriodPresentation or ingest-time normalization.
+globs: backend/infrastructure/sources/**/*.py,backend/repositories/**/*.py
+alwaysApply: false
+---
+
+# Data source flow semantics (cumulative vs discrete)
+
+Financial and quasi-financial APIs mix **three** kinds of numbers. Mixing them breaks `FinancialHistory.ttm_series`, valuation, and quality steps.
+
+## Before you map raw rows into the domain
+
+1. **Classify each numeric flow column** (and any derived ratio built from flows):
+   - **Calendar YTD cumulative** (typical THS A-share quarterly P&L / cash flow within a calendar year),
+   - **Fiscal YTD cumulative** (typical Eastmoney HK F10 main indicator and HK cash-flow `AMOUNT` interim rows, with a full-year row at fiscal year-end),
+   - **Single-period (one quarter or one month)** already suitable for `DISCRETE`,
+   - **Point-in-time** (market cap, spot price, vendor PE-TTM on a date — not quarterly accounting flows).
+
+2. **Wire the model correctly**
+   - Use `PeriodPresentation.YTD_CUMULATIVE` only when upstream rows are calendar YTD and `FinancialHistory` should subtract prior quarter within the year.
+   - Use `PeriodPresentation.DISCRETE` only when each stored row is already a single-period amount; if the wire format is fiscal YTD, **normalize at ingest** (see `hk_f10_income_deaccum` / `fetch_reports_hk`) before attaching `DISCRETE`.
+
+3. **Document at the source**
+   - Add or extend a short module docstring on the fetch/parser module stating **per endpoint or per column** which of the categories above applies.
+   - Keep the project-wide inventory in `backend/infrastructure/sources/__init__.py` in sync when you add or change semantics.
+
+## Do not
+
+- Assume “quarterly report date” implies “single-quarter value” — HK and other IFRS feeds often publish **cumulative within the fiscal year** on interim dates.
+- Mark `DISCRETE` while still storing raw YTD cumulants (double-wrong: TTM sums overlapping windows).
+
+## Quick reference (this repo)
+
+- A-share THS abstract + cash flow: **calendar YTD** → `YTD_CUMULATIVE` in `financial_repository`.
+- HK Eastmoney F10 main indicator + HK cash-flow lines used in reports: **fiscal YTD on the wire** → deaccum at ingest → `DISCRETE`.
+- `stock_value_em`, Baidu HK valuation, Xueqiu spot: **point-in-time / vendor metrics**, not flow cumulants.

@@ -1,0 +1,46 @@
+---
+description: Minimize fallback behavior; confirm with the user before adding one
+alwaysApply: true
+---
+
+# Minimize Fallbacks
+
+Fallbacks (default values, `or` chains, multi-stage degradation, broad
+`try/except` returning defaults) compound complexity and hide upstream bugs.
+They make data flow harder to reason about and silently mask regressions.
+
+## Rules
+
+- **Default to explicit failure.** Let the caller see the error and decide.
+- **Never add a new fallback without first confirming with the user.** State:
+  1. what condition triggers it,
+  2. what the fallback value is,
+  3. why surfacing the failure is not acceptable.
+- **When refactoring, actively delete obsolete fallback layers** (e.g. unused
+  `fallback_*` parameters threaded through helpers, dead `or ""` tails).
+- A fallback that exists purely "just in case" is not justified. Either the
+  case is real and documented, or it gets removed.
+
+## Examples
+
+```python
+# BAD: three-level silent degradation
+name = info.get("name") or fallback_name or symbol_code
+
+# GOOD: trust the source of truth, fail loudly otherwise
+name = info["name"]
+```
+
+```python
+# BAD: swallows the real error
+try:
+    return parse(value)
+except Exception:
+    return 0
+
+# GOOD: let the caller handle it
+return parse(value)
+```
+
+If you believe a fallback is genuinely required, stop and ask the user before
+writing it.
