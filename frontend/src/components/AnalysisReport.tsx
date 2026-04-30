@@ -13,10 +13,10 @@ export default function AnalysisReport({ state }: Props) {
   const { stockName, stockCode, industry, steps, complete, loading } = state;
 
   return (
-    <div className="w-full max-w-4xl mx-auto mt-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <div className="mx-auto mt-4 w-full max-w-4xl space-y-4 sm:mt-8 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h2 className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xl font-bold text-slate-900 sm:text-2xl">
             <span className="inline-flex flex-wrap items-baseline gap-x-2">
               <span>{stockName || stockCode}</span>
               {stockName && stockName !== stockCode && (
@@ -24,7 +24,7 @@ export default function AnalysisReport({ state }: Props) {
               )}
             </span>
             {industry && (
-              <span className="text-base font-normal text-slate-600 whitespace-nowrap">
+              <span className="text-sm font-normal text-slate-600 sm:text-base sm:whitespace-nowrap">
                 · {industry}
               </span>
             )}
@@ -34,9 +34,10 @@ export default function AnalysisReport({ state }: Props) {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => navigate("/")}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 bg-slate-100
-                     rounded-xl hover:bg-slate-200 transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm
+                     text-slate-600 transition-colors hover:bg-slate-200 sm:w-auto sm:justify-start sm:py-2"
         >
           <RotateCcw className="w-4 h-4" />
           重新分析

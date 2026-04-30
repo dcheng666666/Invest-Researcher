@@ -13,6 +13,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { AnnualRevenueChartPoint, PeriodMetric } from "../types";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 interface ReferenceLineSpec {
   y: number;
@@ -136,6 +137,18 @@ export function MetricLineChart({
   rightMargin,
   autoClampY,
 }: LineChartProps) {
+  const mdUp = useMediaQuery("(min-width: 768px)");
+  const resolvedRightMargin =
+    rightMargin != null
+      ? mdUp
+        ? rightMargin
+        : Math.max(8, Math.round(rightMargin * 0.45))
+      : undefined;
+  const lineChartHeight = mdUp ? 260 : 220;
+  const yAxisWidth = mdUp ? 70 : 48;
+  const tickFontY = mdUp ? 12 : 10;
+  const tickFontX = mdUp ? 10 : 8;
+
   const ownPeriods = new Set<string>();
   series.forEach((s) => s.data.forEach((d) => ownPeriods.add(metricPeriod(d))));
   const sortedPeriods = sharedPeriods ?? Array.from(ownPeriods).sort();
@@ -205,19 +218,22 @@ export function MetricLineChart({
   return (
     <div className="mt-4">
       <h4 className="text-sm font-medium text-slate-600 mb-2">{title}</h4>
-      <ResponsiveContainer width="100%" height={260}>
-        <LineChart data={displayData} margin={rightMargin != null ? { right: rightMargin } : undefined}>
+      <ResponsiveContainer width="100%" height={lineChartHeight}>
+        <LineChart
+          data={displayData}
+          margin={resolvedRightMargin != null ? { right: resolvedRightMargin } : undefined}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis
             dataKey="period"
-            tick={{ fontSize: 10 }}
+            tick={{ fontSize: tickFontX }}
             {...xAxisProps}
             height={30}
           />
           <YAxis
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: tickFontY }}
             tickFormatter={yAxisFormatter}
-            width={70}
+            width={yAxisWidth}
             {...(clampDomain ? { domain: clampDomain, allowDataOverflow: true } : {})}
           />
           <Tooltip
@@ -302,6 +318,12 @@ export function MetricBarChart({
   yAxisFormatter,
   sharedPeriods,
 }: BarChartProps) {
+  const mdUp = useMediaQuery("(min-width: 768px)");
+  const barChartHeight = mdUp ? 220 : 190;
+  const yAxisWidthBar = mdUp ? 60 : 44;
+  const tickFontYBar = mdUp ? 12 : 10;
+  const tickFontXBar = mdUp ? 10 : 8;
+
   if (data.length === 0) return null;
 
   let chartData: Record<string, string | number | null>[];
@@ -339,12 +361,12 @@ export function MetricBarChart({
   return (
     <div className="mt-4">
       <h4 className="text-sm font-medium text-slate-600 mb-2">{title}</h4>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={barChartHeight}>
         <BarChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis
             dataKey="period"
-            tick={{ fontSize: 10 }}
+            tick={{ fontSize: tickFontXBar }}
             {...(q1Ticks
               ? {
                   ticks: q1Ticks,
@@ -359,9 +381,9 @@ export function MetricBarChart({
             height={30}
           />
           <YAxis
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: tickFontYBar }}
             tickFormatter={yAxisFormatter}
-            width={60}
+            width={yAxisWidthBar}
           />
           <Tooltip
             content={({ active, payload, label }) => {
@@ -420,6 +442,18 @@ export function DualBarChart({
   sharedPeriods,
   rightMargin,
 }: DualBarChartProps) {
+  const mdUp = useMediaQuery("(min-width: 768px)");
+  const resolvedRightMarginDual =
+    rightMargin != null
+      ? mdUp
+        ? rightMargin
+        : Math.max(8, Math.round(rightMargin * 0.45))
+      : undefined;
+  const dualBarHeight = mdUp ? 260 : 220;
+  const yAxisWidthDual = mdUp ? 70 : 48;
+  const tickFontYDual = mdUp ? 12 : 10;
+  const tickFontXDual = mdUp ? 10 : 8;
+
   const ownPeriods = new Set<string>();
   series.forEach((s) => s.data.forEach((d) => ownPeriods.add(metricPeriod(d))));
   const sortedPeriods = sharedPeriods ?? Array.from(ownPeriods).sort();
@@ -440,20 +474,23 @@ export function DualBarChart({
   return (
     <div className="mt-4">
       <h4 className="text-sm font-medium text-slate-600 mb-2">{title}</h4>
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={chartData} margin={rightMargin != null ? { right: rightMargin } : undefined}>
+      <ResponsiveContainer width="100%" height={dualBarHeight}>
+        <BarChart
+          data={chartData}
+          margin={resolvedRightMarginDual != null ? { right: resolvedRightMarginDual } : undefined}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis
             dataKey="period"
-            tick={{ fontSize: 10 }}
+            tick={{ fontSize: tickFontXDual }}
             ticks={q1Ticks}
             tickFormatter={(v: string) => v.includes("Q") ? v.split("Q")[0] : v}
             height={30}
           />
           <YAxis
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: tickFontYDual }}
             tickFormatter={yAxisFormatter}
-            width={70}
+            width={yAxisWidthDual}
           />
           <Tooltip
             formatter={(value, name) => {
@@ -523,6 +560,12 @@ export function RevenueMarketCapChart({
   caption = "柱状图为各季度的TTM（过去12个月滚动）营收与扣非净利润，折线为季末月均市值。业绩持续上行而市值停滞 → 估值偏低；反之则偏高。",
   sharedPeriods,
 }: RevenueMarketCapChartProps) {
+  const mdUp = useMediaQuery("(min-width: 768px)");
+  const composedHeight = mdUp ? 300 : 252;
+  const yAxisWide = mdUp ? 70 : 50;
+  const tickFontComposed = mdUp ? 11 : 9;
+  const axisLabelFont = mdUp ? 11 : 9;
+
   if (ttmRevenueChart.length === 0 && marketCapMonthly.length === 0) return null;
 
   const monthlyMode = !!sharedPeriods?.length && sharedPeriods.every(isMonthlyPeriod);
@@ -598,39 +641,39 @@ export function RevenueMarketCapChart({
   return (
     <div className="mt-4">
       <h4 className="text-sm font-medium text-slate-600 mb-2">{title}</h4>
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={composedHeight}>
         <ComposedChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis
             dataKey="period"
             ticks={xTicks}
-            tick={{ fontSize: 10 }}
+            tick={{ fontSize: mdUp ? 10 : 8 }}
             tickFormatter={xTickFormatter}
             height={30}
           />
           <YAxis
             yAxisId="left"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: tickFontComposed }}
             tickFormatter={yiFormatter}
-            width={70}
+            width={yAxisWide}
             label={{
               value: "业绩（亿）",
               angle: -90,
               position: "insideLeft",
-              style: { fontSize: 11, fill: "#475569" },
+              style: { fontSize: axisLabelFont, fill: "#475569" },
             }}
           />
           <YAxis
             yAxisId="right"
             orientation="right"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: tickFontComposed }}
             tickFormatter={yiFormatter}
-            width={70}
+            width={yAxisWide}
             label={{
               value: marketCapLabel,
               angle: 90,
               position: "insideRight",
-              style: { fontSize: 11, fill: "#ef4444" },
+              style: { fontSize: axisLabelFont, fill: "#ef4444" },
             }}
           />
           <Tooltip

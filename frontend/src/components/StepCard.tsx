@@ -358,37 +358,43 @@ export default function StepCard({ stepNum, event }: Props) {
         ${!event ? "border-slate-100 opacity-60" : ""}
       `}
     >
-      <div className="px-6 py-4 flex items-center gap-4 border-b border-slate-100">
-        <div
-          className={`w-10 h-10 rounded-xl flex items-center justify-center
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+        <div className="flex min-w-0 items-start gap-3">
+          <div
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl
           ${isCompleted ? (verdictStyle?.bg || "bg-slate-100") : "bg-slate-100"}
         `}
-        >
-          <Icon
-            className={`w-5 h-5 ${isCompleted ? (verdictStyle?.text || "text-slate-600") : "text-slate-500"}`}
-          />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 font-medium">
-              步骤 {stepNum}
-            </span>
-            {isRunning && (
-              <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-            )}
-            {isCompleted && (
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            )}
-            {isError && <AlertCircle className="w-4 h-4 text-red-500" />}
+          >
+            <Icon
+              className={`w-5 h-5 ${isCompleted ? (verdictStyle?.text || "text-slate-600") : "text-slate-500"}`}
+            />
           </div>
-          <h3 className="font-semibold text-slate-900">{meta.label}</h3>
-          <p className="text-sm text-slate-500">{meta.subtitle}</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-slate-400">
+                步骤 {stepNum}
+              </span>
+              {isRunning && (
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+              )}
+              {isCompleted && (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              )}
+              {isError && <AlertCircle className="h-4 w-4 text-red-500" />}
+            </div>
+            <h3 className="font-semibold text-slate-900">{meta.label}</h3>
+            <p className="text-sm text-slate-500">{meta.subtitle}</p>
+          </div>
         </div>
-        {isCompleted && data && <ScoreBadge score={data.score as number} />}
+        {isCompleted && data && (
+          <div className="shrink-0 self-start sm:self-center">
+            <ScoreBadge score={data.score as number} />
+          </div>
+        )}
       </div>
 
       {isRunning && (
-        <div className="px-6 py-8 flex items-center justify-center">
+        <div className="flex items-center justify-center px-4 py-8 sm:px-6">
           <div className="flex items-center gap-3 text-blue-600">
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-sm">正在分析...</span>
@@ -397,13 +403,13 @@ export default function StepCard({ stepNum, event }: Props) {
       )}
 
       {isError && (
-        <div className="px-6 py-4 bg-red-50">
+        <div className="bg-red-50 px-4 py-4 sm:px-6">
           <p className="text-sm text-red-600">{event?.error || "分析出错"}</p>
         </div>
       )}
 
       {isCompleted && data && (
-        <div className="px-6 py-4">
+        <div className="px-4 py-4 sm:px-6">
           {verdictStyle && (
             <div
               className={`inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium ${verdictStyle.bg} ${verdictStyle.text} mb-3`}

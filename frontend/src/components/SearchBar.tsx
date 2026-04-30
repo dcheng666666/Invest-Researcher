@@ -82,9 +82,9 @@ export default function SearchBar({ onSelect, disabled }: Props) {
           onFocus={() => results.length > 0 && setShowDropdown(true)}
           placeholder="输入公司名或代码，如 贵州茅台、600519、腾讯控股、00700"
           disabled={disabled}
-          className="w-full pl-12 pr-10 py-4 text-lg bg-white border-2 border-slate-200 rounded-2xl
-                     shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none
-                     transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-2xl border-2 border-slate-200 bg-white py-3.5 pl-12 pr-10 text-base
+                     shadow-sm outline-none transition-all duration-200 focus:border-blue-500 focus:ring-4
+                     focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-lg"
         />
         {query && (
           <button
@@ -117,17 +117,15 @@ export default function SearchBar({ onSelect, disabled }: Props) {
                   setSelected(true);
                   setShowDropdown(false);
                 }}
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50 transition-colors text-left"
+                className="flex w-full flex-col items-start gap-1 px-4 py-3 text-left transition-colors hover:bg-blue-50 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
               >
-                <div>
-                  <span className="font-medium text-slate-900">
-                    {stock.name}
-                  </span>
-                  <span className="ml-3 text-sm text-slate-500">
+                <div className="min-w-0">
+                  <span className="font-medium text-slate-900">{stock.name}</span>
+                  <span className="mt-0.5 block text-sm text-slate-500 sm:ml-2 sm:mt-0 sm:inline">
                     {stock.code}
                   </span>
                 </div>
-                <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-600">
+                <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                   {stock.market}
                 </span>
               </button>
