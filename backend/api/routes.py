@@ -15,6 +15,7 @@ from backend.api.excel_export import export_rule_analysis_workbook
 from backend.api.sse import complete_event, step_event
 from backend.application.analysis import service as analysis_service
 from backend.application.analysis.step_registry import STEP_CONFIGS
+from backend.infrastructure.parsers import DEFAULT_WINDOW_YEARS
 from backend.repositories import symbol_repository
 
 logger = logging.getLogger(__name__)
@@ -28,12 +29,14 @@ async def search(q: str = Query(..., min_length=1)):
     return SearchResponse(results=[StockSearchResult(**r) for r in results])
 
 
-async def _analysis_stream(code: str) -> AsyncGenerator[dict, None]:
+async def _analysis_stream(code: str, window_years: int) -> AsyncGenerator[dict, None]:
     stock_name = await asyncio.to_thread(analysis_service.stock_display_name, code)
 
     yield {"event": "step", "data": step_event(0, "数据获取", "running")}
 
-    ctx = await asyncio.to_thread(analysis_service.build_context, code)
+    ctx = await asyncio.to_thread(
+        analysis_service.build_context, code, window_years=window_years
+    )
 
     if ctx is None:
         yield {
@@ -97,12 +100,17 @@ async def _analysis_stream(code: str) -> AsyncGenerator[dict, None]:
 
 
 @router.get("/analyze/{code}")
-async def analyze(code: str):
-    return EventSourceResponse(_analysis_stream(code))
+async def analyze(
+    code: str,
+    window_years: int = Query(
+        DEFAULT_WINDOW_YEARS, ge=3, le=20, description="Rolling history window in years"
+    ),
+):
+    return EventSourceResponse(_analysis_stream(code, window_years))
 
 
-def _build_excel_for_code(code: str) -> tuple[bytes, str] | None:
-    ctx = analysis_service.build_context(code)
+def _build_excel_for_code(code: str, window_years: int) -> tuple[bytes, str] | None:
+    ctx = analysis_service.build_context(code, window_years=window_years)
     if ctx is None:
         return None
     name = analysis_service.stock_display_name(code)
@@ -113,9 +121,14 @@ def _build_excel_for_code(code: str) -> tuple[bytes, str] | None:
 
 
 @router.get("/analyze/{code}/excel")
-async def analyze_excel(code: str):
+async def analyze_excel(
+    code: str,
+    window_years: int = Query(
+        DEFAULT_WINDOW_YEARS, ge=3, le=20, description="Rolling history window in years"
+    ),
+):
     """Run the same rule-based steps as the SSE flow and return a single .xlsx file."""
-    payload = await asyncio.to_thread(_build_excel_for_code, code)
+    payload = await asyncio.to_thread(_build_excel_for_code, code, window_years)
     if payload is None:
         raise HTTPException(
             status_code=404,

@@ -27,6 +27,7 @@ class AnalysisContext:
     financials: FinancialHistory
     dividends: DividendHistory
     as_of: datetime
+    window_years: int
 
     @property
     def name(self) -> str:

@@ -503,20 +503,35 @@ export default function StepCard({ stepNum, event }: Props) {
               {data.pe_mean != null && data.pe_std_dev != null && (
                 <div className="bg-amber-50 rounded-xl p-2 sm:p-3 text-center flex flex-col justify-center flex-1 min-w-[6.5rem] shrink-0">
                   <div className="text-[10px] sm:text-xs text-amber-700 leading-tight">
-                    低估（PE 均值 −1σ）对应股价
+                    安全边际股价区间
                   </div>
-                  {data.current_pe != null &&
-                  (data.current_pe as number) <=
-                    (data.pe_mean as number) - (data.pe_std_dev as number) ? (
+                  <div className="text-[9px] sm:text-[10px] text-amber-600/90 leading-tight mt-0.5">
+                    历史 TTM PE：均值−1σ ~ 均值（盈利与股数不变）
+                  </div>
+                  {data.price_at_pe_mean == null ? (
                     <div className="text-xs sm:text-sm font-semibold text-amber-900 mt-1 leading-tight">
-                      当前 PE 已处于该水平或更低
+                      暂无现价或无法估算
                     </div>
                   ) : data.price_at_pe_minus_one_sigma != null ? (
-                    <div className="text-base sm:text-lg font-bold text-amber-900 mt-0.5">
+                    <div className="text-base sm:text-lg font-bold text-amber-900 mt-0.5 leading-tight">
                       {(data.price_at_pe_minus_one_sigma as number).toFixed(2)}
+                      <span className="text-amber-700 font-normal mx-0.5">–</span>
+                      {(data.price_at_pe_mean as number).toFixed(2)}
                       <span className="text-[10px] sm:text-xs font-normal text-amber-700 ml-0.5">
                         元
                       </span>
+                    </div>
+                  ) : data.current_pe != null &&
+                    (data.current_pe as number) <=
+                      (data.pe_mean as number) - (data.pe_std_dev as number) ? (
+                    <div className="mt-1 space-y-0.5">
+                      <div className="text-xs sm:text-sm font-semibold text-amber-900 leading-tight">
+                        当前 PE 已不高于均值−1σ
+                      </div>
+                      <div className="text-sm font-bold text-amber-900">
+                        中枢参考 {(data.price_at_pe_mean as number).toFixed(2)}
+                        <span className="text-[10px] font-normal text-amber-700 ml-0.5">元</span>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-xs sm:text-sm font-semibold text-amber-900 mt-1 leading-tight">

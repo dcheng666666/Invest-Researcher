@@ -9,6 +9,7 @@ from typing import Any
 from backend.application.analysis.context import AnalysisContext
 from backend.application.analysis.score_aggregator import overall_score
 from backend.application.analysis.step_registry import STEP_CONFIGS, STEP_TITLES
+from backend.infrastructure.parsers import DEFAULT_WINDOW_YEARS
 from backend.repositories import (
     dividend_repository,
     financial_repository,
@@ -19,9 +20,15 @@ from backend.repositories import (
 logger = logging.getLogger(__name__)
 
 
-def build_context(code: str) -> AnalysisContext | None:
-    financials = financial_repository.get_financial_history(code)
-    security = security_repository.load_security_with_history(code)
+def build_context(
+    code: str, *, window_years: int = DEFAULT_WINDOW_YEARS
+) -> AnalysisContext | None:
+    financials = financial_repository.get_financial_history(
+        code, window_years=window_years
+    )
+    security = security_repository.load_security_with_history(
+        code, window_years=window_years
+    )
     dividends = dividend_repository.get_history(code)
 
     return AnalysisContext(
@@ -30,6 +37,7 @@ def build_context(code: str) -> AnalysisContext | None:
         financials=financials,
         dividends=dividends,
         as_of=datetime.utcnow(),
+        window_years=window_years,
     )
 
 

@@ -74,6 +74,7 @@ def analyze(ctx: AnalysisContext) -> PayoutResult:
         dividend_record,
         annual_eps_deducted,
         current_price=snapshot.current_price,
+        history_years=ctx.window_years,
     )
 
     counts_by_year = dict(dividend_record.annual_distribution_counts)

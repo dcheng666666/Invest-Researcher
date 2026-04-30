@@ -21,7 +21,7 @@ export function useAnalysis() {
   const [state, setState] = useState<AnalysisState>(initialState);
   const abortRef = useRef<AbortController | null>(null);
 
-  const startAnalysis = useCallback((code: string) => {
+  const startAnalysis = useCallback((code: string, windowYears: number = 10) => {
     if (abortRef.current) {
       abortRef.current.abort();
     }
@@ -31,8 +31,10 @@ export function useAnalysis() {
 
     setState({ ...initialState, loading: true, stockCode: code });
 
+    const params = new URLSearchParams();
+    params.set("window_years", String(windowYears));
     const eventSource = new EventSource(
-      `/api/analyze/${encodeURIComponent(code)}`
+      `/api/analyze/${encodeURIComponent(code)}?${params.toString()}`
     );
 
     eventSource.addEventListener("step", (e: MessageEvent) => {

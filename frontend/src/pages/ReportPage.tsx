@@ -1,10 +1,31 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import { useAnalysis } from "../hooks/useAnalysis";
 import AnalysisReport from "../components/AnalysisReport";
 import SearchBar from "../components/SearchBar";
 import type { StockSearchResult } from "../types";
 import type { OutletContext } from "../App";
+
+const WINDOW_YEARS_STORAGE_KEY = "analysis_window_years";
+const WINDOW_YEAR_OPTIONS = [3, 5, 7, 10, 12, 15, 20] as const;
+
+function readStoredWindowYears(): number {
+  try {
+    const raw = localStorage.getItem(WINDOW_YEARS_STORAGE_KEY);
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (
+        !Number.isNaN(n) &&
+        (WINDOW_YEAR_OPTIONS as readonly number[]).includes(n)
+      ) {
+        return n;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return 10;
+}
 
 function parseSymbol(symbol: string): { market: string; code: string } | null {
   const match = symbol.match(/^(sh|sz|hk)(\d+)$/i);
@@ -17,18 +38,22 @@ export default function ReportPage() {
   const navigate = useNavigate();
   const { addHistoryItem } = useOutletContext<OutletContext>();
   const { state, startAnalysis, reset } = useAnalysis();
-  const lastStartedRef = useRef<string>("");
+  const [windowYears, setWindowYears] = useState(readStoredWindowYears);
+  const committedAnalysisKeyRef = useRef<string>("");
   const savedRef = useRef<string>("");
 
   const parsed = symbol ? parseSymbol(symbol) : null;
 
   useEffect(() => {
-    if (parsed && parsed.code !== lastStartedRef.current) {
-      lastStartedRef.current = parsed.code;
-      reset();
-      startAnalysis(parsed.code);
+    if (!parsed) return;
+    const key = `${parsed.code}:${windowYears}`;
+    if (committedAnalysisKeyRef.current === key) {
+      return;
     }
-  }, [parsed?.code, startAnalysis, reset]);
+    committedAnalysisKeyRef.current = key;
+    reset();
+    startAnalysis(parsed.code, windowYears);
+  }, [parsed?.code, windowYears, startAnalysis, reset]);
 
   useEffect(() => {
     if (
@@ -56,9 +81,39 @@ export default function ReportPage() {
     );
   }
 
+  function handleWindowYearsChange(next: number) {
+    setWindowYears(next);
+    try {
+      localStorage.setItem(WINDOW_YEARS_STORAGE_KEY, String(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <>
       <SearchBar onSelect={handleSelect} disabled={state.loading} />
+
+      <div className="w-full max-w-4xl mx-auto mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+        <label htmlFor="window-years" className="shrink-0">
+          历史数据窗口（年）
+        </label>
+        <select
+          id="window-years"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-800 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 disabled:opacity-50"
+          value={windowYears}
+          disabled={state.loading}
+          onChange={(e) =>
+            handleWindowYearsChange(parseInt(e.target.value, 10))
+          }
+        >
+          {WINDOW_YEAR_OPTIONS.map((y) => (
+            <option key={y} value={y}>
+              最近 {y} 年
+            </option>
+          ))}
+        </select>
+      </div>
 
       {state.error && !state.loading && Object.keys(state.steps).length === 0 && (
         <div className="max-w-xl mx-auto mt-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">

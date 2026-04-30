@@ -53,6 +53,7 @@ def analyze(ctx: AnalysisContext) -> ValuationResult:
     assessment = ValuationEvaluator().evaluate(snapshot, valuation_history, peg=peg)
 
     price_at_pe_minus_one_sigma = compute_price_at_pe_minus_one_sigma(snapshot, band)
+    price_at_pe_mean = compute_price_at_pe_mean(snapshot, band)
 
     return ValuationResult(
         pe_history=labelled_pairs_to_period_metrics(valuation_history.metric_pairs()),
@@ -72,6 +73,9 @@ def analyze(ctx: AnalysisContext) -> ValuationResult:
             round(price_at_pe_minus_one_sigma, 2)
             if price_at_pe_minus_one_sigma is not None
             else None
+        ),
+        price_at_pe_mean=(
+            round(price_at_pe_mean, 2) if price_at_pe_mean is not None else None
         ),
         ttm_revenue_chart=ttm_chart_points(history, "revenue"),
         ttm_profit_chart=ttm_chart_points(history, "net_profit_deducted"),
@@ -103,6 +107,27 @@ def compute_price_at_pe_minus_one_sigma(
     if current_pe is None or current_pe <= 0 or price is None or price <= 0:
         return None
     if current_pe <= target_pe:
+        return None
+    return price * (target_pe / current_pe)
+
+
+def compute_price_at_pe_mean(
+    snapshot: ValuationSnapshot, band: HistoricalBand | None
+) -> float | None:
+    """Spot price if TTM PE sat at the historical sample mean.
+
+    Same linear scaling as ``compute_price_at_pe_minus_one_sigma`` with
+    ``PE_target = band.mean``. Returns ``None`` when the band is missing, mean is
+    not positive, or spot inputs are invalid.
+    """
+    if band is None:
+        return None
+    target_pe = band.mean
+    if target_pe <= 0:
+        return None
+    current_pe = snapshot.pe_value
+    price = snapshot.price
+    if current_pe is None or current_pe <= 0 or price is None or price <= 0:
         return None
     return price * (target_pe / current_pe)
 

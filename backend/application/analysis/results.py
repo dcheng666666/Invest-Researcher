@@ -116,6 +116,9 @@ class ValuationResult(BaseModel):
     #: band is unavailable, target PE is not positive, inputs are missing, or
     #: current PE is already at or below that level.
     price_at_pe_minus_one_sigma: float | None = None
+    #: Implied spot if TTM PE sat at historical mean (upper end of the PE band
+    #: mapped price range paired with ``price_at_pe_minus_one_sigma``).
+    price_at_pe_mean: float | None = None
     # Display-only series for the market-cap-vs-业绩 reasonability chart;
     # used by the frontend to visualise whether market cap tracks earnings.
     ttm_revenue_chart: list[AnnualRevenueChartPoint] = []

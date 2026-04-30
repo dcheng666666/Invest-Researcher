@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from backend.application.analysis.steps.valuation import compute_price_at_pe_minus_one_sigma
+import pytest
+
+from backend.application.analysis.steps.valuation import (
+    compute_price_at_pe_mean,
+    compute_price_at_pe_minus_one_sigma,
+)
 from backend.domain.valuation.band import HistoricalBand
 from backend.domain.valuation.basis import EarningsBasis
 from backend.domain.valuation.multiples import PERatio
@@ -73,3 +78,27 @@ def test_none_when_no_price_or_pe() -> None:
 def test_none_when_std_non_positive() -> None:
     b = HistoricalBand(mean=20.0, std_dev=0.0, low=20.0, high=20.0, sample_size=5)
     assert compute_price_at_pe_minus_one_sigma(_snap(price=100.0, pe=30.0), b) is None
+
+
+def test_price_at_pe_mean_scales_linearly() -> None:
+    # mean=20, current PE=30, price=100 -> 100 * 20/30
+    assert compute_price_at_pe_mean(_snap(price=100.0, pe=30.0), _band(20.0, 5.0)) == pytest.approx(
+        2000 / 30
+    )
+
+
+def test_price_at_pe_mean_when_current_below_mean() -> None:
+    """Still defined: fair multiple below current implies higher fair price."""
+    assert compute_price_at_pe_mean(_snap(price=100.0, pe=10.0), _band(20.0, 5.0)) == 200.0
+
+
+def test_price_at_pe_mean_none_when_band_or_mean_invalid() -> None:
+    assert compute_price_at_pe_mean(_snap(price=100.0, pe=30.0), None) is None
+    zero_mean = HistoricalBand(mean=0.0, std_dev=5.0, low=0.0, high=5.0, sample_size=5)
+    assert compute_price_at_pe_mean(_snap(price=100.0, pe=30.0), zero_mean) is None
+
+
+def test_price_at_pe_mean_none_when_no_price_or_pe() -> None:
+    b = _band(20.0, 5.0)
+    assert compute_price_at_pe_mean(_snap(price=None, pe=30.0), b) is None
+    assert compute_price_at_pe_mean(_snap(price=100.0, pe=None), b) is None
