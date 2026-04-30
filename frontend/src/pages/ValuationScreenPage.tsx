@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { apiFetch } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 type VerdictOpt =
   | "excellent"
@@ -132,6 +134,7 @@ function boardLabel(board: string): string {
 }
 
 export default function ValuationScreenPage() {
+  const { ready, valuationAllowed } = useAuth();
   const [meta, setMeta] = useState<MetaResponse | null>(null);
   const [data, setData] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -187,7 +190,7 @@ export default function ValuationScreenPage() {
   }, []);
 
   const loadMeta = useCallback(async () => {
-    const res = await fetch("/api/valuation-screen/meta");
+    const res = await apiFetch("/api/valuation-screen/meta");
     if (!res.ok) throw new Error(`meta ${res.status}`);
     const j = (await res.json()) as MetaResponse;
     setMeta(j);
@@ -215,7 +218,7 @@ export default function ValuationScreenPage() {
       params.set("limit", String(limit));
       params.set("offset", String(offset));
 
-      const res = await fetch(`/api/valuation-screen?${params.toString()}`);
+      const res = await apiFetch(`/api/valuation-screen?${params.toString()}`);
       if (!res.ok) throw new Error(`list ${res.status}`);
       const j = (await res.json()) as ListResponse;
       setData(j);
@@ -228,12 +231,18 @@ export default function ValuationScreenPage() {
   }, [refreshDate, board, overallVerdict, stepBoundsKey, sort, offset]);
 
   useEffect(() => {
+    if (!ready || !valuationAllowed) {
+      return;
+    }
     void loadMeta().catch((e) => setError(String(e)));
-  }, [loadMeta]);
+  }, [loadMeta, ready, valuationAllowed]);
 
   useEffect(() => {
+    if (!ready || !valuationAllowed) {
+      return;
+    }
     void loadList();
-  }, [loadList]);
+  }, [loadList, ready, valuationAllowed]);
 
   const dateOptions = data?.completed_refresh_dates?.length
     ? data.completed_refresh_dates
@@ -245,6 +254,37 @@ export default function ValuationScreenPage() {
     overallVerdict !== "" ||
     stepMin.some((s) => s.trim() !== "") ||
     stepMax.some((s) => s.trim() !== "");
+
+  if (!ready) {
+    return (
+      <div className="text-center py-16 text-slate-500 text-sm">加载中…</div>
+    );
+  }
+
+  if (!valuationAllowed) {
+    return (
+      <div className="max-w-lg mx-auto space-y-4 text-center py-16">
+        <h2 className="text-xl font-bold text-slate-900">估值筛选</h2>
+        <p className="text-sm text-slate-600">
+          估值筛选仅对高级会员开放。请使用高级会员账号登录，或联系管理员升级。
+        </p>
+        <div className="flex flex-wrap justify-center gap-3 text-sm">
+          <Link
+            to="/login"
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            登录
+          </Link>
+          <Link
+            to="/"
+            className="text-slate-600 hover:text-slate-900 font-medium"
+          >
+            返回首页
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

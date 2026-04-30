@@ -4,9 +4,11 @@ import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from backend.api.routes import router
+from backend.config import settings
+from backend.repositories import user_repository
 from backend.repositories.symbol_repository import initialize as initialize_symbol_store
 
 _LOG_LEVEL_NAME = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -21,11 +23,28 @@ logging.basicConfig(
 )
 logging.getLogger().setLevel(_LOG_LEVEL)
 
+initialize_symbol_store()
+_session_override = settings.app_session_secret.strip()
+_SESSION_SECRET = (
+    _session_override
+    if _session_override
+    else user_repository.get_or_create_session_secret()
+)
+
 app = FastAPI(title="价值投资五步法分析", version="0.1.0")
 
 app.add_middleware(
+    SessionMiddleware,
+    secret_key=_SESSION_SECRET,
+    same_site="lax",
+    max_age=60 * 60 * 24 * 7,
+)
+
+_origins = settings.cors_origin_list()
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

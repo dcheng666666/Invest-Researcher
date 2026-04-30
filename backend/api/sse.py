@@ -13,12 +13,15 @@ def step_event(
     *,
     data: dict[str, Any] | None = None,
     error: str | None = None,
+    error_code: str | None = None,
 ) -> str:
     payload: dict[str, Any] = {"step": step, "title": title, "status": status}
     if data is not None:
         payload["data"] = data
     if error is not None:
         payload["error"] = error
+    if error_code is not None:
+        payload["error_code"] = error_code
     return json.dumps(payload, ensure_ascii=False)
 
 

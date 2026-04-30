@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import AsyncGenerator
+from typing import Annotated, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sse_starlette.sse import EventSourceResponse
 
@@ -27,11 +27,21 @@ from backend.application.analysis.score_aggregator import (
 from backend.application.analysis.step_registry import STEP_CONFIGS
 from backend.infrastructure import sqlite_store
 from backend.infrastructure.parsers import DEFAULT_WINDOW_YEARS
-from backend.repositories import symbol_repository
+from backend.api.admin_users_routes import admin_users_router
+from backend.api.auth_routes import auth_router
+from backend.api.deps import (
+    MembershipContext,
+    get_membership_context,
+    require_login_when_users_exist,
+    require_valuation_premium,
+)
+from backend.repositories import symbol_repository, user_repository
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api")
+api_router = APIRouter(
+    prefix="/api", dependencies=[Depends(require_login_when_users_exist)]
+)
 
 
 _SORT_WHITELIST = frozenset(
@@ -66,13 +76,17 @@ def parse_valuation_sort_clauses(sort: str) -> list[str]:
     return parts
 
 
-@router.get("/search", response_model=SearchResponse)
+@api_router.get("/search", response_model=SearchResponse)
 async def search(q: str = Query(..., min_length=1)):
     results = await asyncio.to_thread(symbol_repository.search, q)
     return SearchResponse(results=[StockSearchResult(**r) for r in results])
 
 
-@router.get("/valuation-screen/meta", response_model=ValuationScreenMetaResponse)
+@api_router.get(
+    "/valuation-screen/meta",
+    response_model=ValuationScreenMetaResponse,
+    dependencies=[Depends(require_valuation_premium)],
+)
 async def valuation_screen_meta(
     dates_limit: int = Query(30, ge=1, le=200),
 ):
@@ -87,7 +101,11 @@ async def valuation_screen_meta(
     return await asyncio.to_thread(_load)
 
 
-@router.get("/valuation-screen", response_model=ValuationScreenListResponse)
+@api_router.get(
+    "/valuation-screen",
+    response_model=ValuationScreenListResponse,
+    dependencies=[Depends(require_valuation_premium)],
+)
 async def valuation_screen(
     refresh_date: str | None = Query(
         None,
@@ -171,7 +189,9 @@ async def valuation_screen(
     return await asyncio.to_thread(_load)
 
 
-async def _analysis_stream(code: str, window_years: int) -> AsyncGenerator[dict, None]:
+async def _analysis_stream(
+    code: str, window_years: int, principal_key: str, tier: str
+) -> AsyncGenerator[dict, None]:
     stock_name = await asyncio.to_thread(analysis_service.stock_display_name, code)
 
     yield {"event": "step", "data": step_event(0, "数据获取", "running")}
@@ -182,12 +202,29 @@ async def _analysis_stream(code: str, window_years: int) -> AsyncGenerator[dict,
 
     if ctx is None:
         yield {
-            "event": "error",
+            "event": "analysis_error",
             "data": step_event(
                 0,
                 "数据获取",
                 "error",
                 error="无法获取财务数据，请检查股票代码。",
+            ),
+        }
+        return
+
+    try:
+        await asyncio.to_thread(
+            user_repository.try_consume_report_slot, principal_key, tier
+        )
+    except user_repository.UsageQuotaExceeded:
+        yield {
+            "event": "analysis_error",
+            "data": step_event(
+                0,
+                "数据获取",
+                "error",
+                error="今日报告次数已达上限，需要升级会员才能继续使用。",
+                error_code="quota_exceeded",
             ),
         }
         return
@@ -241,14 +278,17 @@ async def _analysis_stream(code: str, window_years: int) -> AsyncGenerator[dict,
     }
 
 
-@router.get("/analyze/{code}")
+@api_router.get("/analyze/{code}")
 async def analyze(
     code: str,
+    m: Annotated[MembershipContext, Depends(get_membership_context)],
     window_years: int = Query(
         DEFAULT_WINDOW_YEARS, ge=3, le=20, description="Rolling history window in years"
     ),
 ):
-    return EventSourceResponse(_analysis_stream(code, window_years))
+    return EventSourceResponse(
+        _analysis_stream(code, window_years, m.principal_key, m.tier)
+    )
 
 
 def _build_excel_for_code(code: str, window_years: int) -> tuple[bytes, str] | None:
@@ -262,9 +302,10 @@ def _build_excel_for_code(code: str, window_years: int) -> tuple[bytes, str] | N
     return body, f"{safe}_analysis.xlsx"
 
 
-@router.get("/analyze/{code}/excel")
+@api_router.get("/analyze/{code}/excel")
 async def analyze_excel(
     code: str,
+    m: Annotated[MembershipContext, Depends(get_membership_context)],
     window_years: int = Query(
         DEFAULT_WINDOW_YEARS, ge=3, le=20, description="Rolling history window in years"
     ),
@@ -276,6 +317,15 @@ async def analyze_excel(
             status_code=404,
             detail="无法获取财务数据，请检查股票代码。",
         )
+    try:
+        await asyncio.to_thread(
+            user_repository.try_consume_report_slot, m.principal_key, m.tier
+        )
+    except user_repository.UsageQuotaExceeded:
+        raise HTTPException(
+            status_code=429,
+            detail="今日报告次数已达上限，需要升级会员才能继续使用。",
+        )
     body, filename = payload
     return Response(
         content=body,
@@ -284,3 +334,9 @@ async def analyze_excel(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+router = APIRouter()
+router.include_router(auth_router)
+router.include_router(admin_users_router)
+router.include_router(api_router)

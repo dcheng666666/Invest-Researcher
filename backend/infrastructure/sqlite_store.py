@@ -72,6 +72,27 @@ CREATE INDEX IF NOT EXISTS idx_val_screen_rows_name
     ON valuation_screen_rows(name);
 CREATE INDEX IF NOT EXISTS idx_val_screen_rows_code
     ON valuation_screen_rows(code);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash BLOB NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0, 1)),
+    membership_tier TEXT NOT NULL DEFAULT 'none',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS daily_report_usage (
+    principal_key TEXT NOT NULL,
+    usage_date TEXT NOT NULL,
+    count INTEGER NOT NULL CHECK (count >= 0),
+    PRIMARY KEY (principal_key, usage_date)
+);
 """
 
 
@@ -79,8 +100,23 @@ def default_db_path() -> Path:
     return DEFAULT_DB_PATH
 
 
+def _migrate_users_membership_tier(conn: sqlite3.Connection) -> None:
+    """Add membership_tier to legacy ``users`` tables created before that column existed."""
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+    )
+    if cur.fetchone() is None:
+        return
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "membership_tier" not in cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN membership_tier TEXT NOT NULL DEFAULT 'none'"
+        )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(DDL)
+    _migrate_users_membership_tier(conn)
 
 
 def initialize_store(db_path: Path | None = None) -> None:

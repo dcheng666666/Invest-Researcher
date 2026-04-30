@@ -20,7 +20,7 @@ export default function ReportPage() {
   const { symbol } = useParams<{ symbol: string }>();
   const navigate = useNavigate();
   const { addHistoryItem } = useOutletContext<OutletContext>();
-  const { state, startAnalysis, reset } = useAnalysis();
+  const { state, startAnalysis, reset, clearError } = useAnalysis();
   const [windowYears, setWindowYears] = useState(DEFAULT_WINDOW_YEARS);
   const committedAnalysisKeyRef = useRef<string>("");
   const savedRef = useRef<string>("");
@@ -87,8 +87,57 @@ export default function ReportPage() {
     }
   }
 
+  const showQuotaOverlay =
+    state.errorCode === "quota_exceeded" && state.error && !state.loading;
+
   return (
     <>
+      {showQuotaOverlay && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quota-overlay-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]"
+            aria-label="关闭"
+            onClick={clearError}
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2
+              id="quota-overlay-title"
+              className="text-lg font-semibold text-slate-900"
+            >
+              报告次数已达上限
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              {state.error}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={clearError}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                知道了
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearError();
+                  navigate("/");
+                }}
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+              >
+                返回首页
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SearchBar onSelect={handleSelect} disabled={state.loading} />
 
       <div className="w-full max-w-4xl mx-auto mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-600">
@@ -112,11 +161,13 @@ export default function ReportPage() {
         </select>
       </div>
 
-      {state.error && !state.loading && Object.keys(state.steps).length === 0 && (
-        <div className="max-w-xl mx-auto mt-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
-          {state.error}
-        </div>
-      )}
+      {state.error &&
+        !state.loading &&
+        state.errorCode !== "quota_exceeded" && (
+          <div className="max-w-xl mx-auto mt-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+            {state.error}
+          </div>
+        )}
 
       <AnalysisReport state={state} />
     </>

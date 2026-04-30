@@ -1,9 +1,11 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
+import { useAuth } from "../context/AuthContext";
 import type { StockSearchResult } from "../types";
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { ready, needsBootstrap } = useAuth();
 
   function handleSelect(stock: StockSearchResult) {
     const symbol = `${stock.market.toLowerCase()}${stock.code}`;
@@ -12,6 +14,15 @@ export default function HomePage() {
 
   return (
     <>
+      {ready && needsBootstrap && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          尚未创建任何用户。请先
+          <Link to="/login" className="font-semibold underline mx-1">
+            创建管理员账号
+          </Link>
+          ，之后所有访问需要登录。
+        </div>
+      )}
       <div className="text-center pt-16 pb-8">
         <h2 className="text-3xl font-bold text-slate-900 mb-3">
           发现好公司，等待好价格

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { apiFetch } from "../lib/api";
 import type { AnalysisState, StepEvent, CompleteEvent } from "../types";
 
 function normalizeIndustry(raw: unknown): string | null {
@@ -6,6 +7,9 @@ function normalizeIndustry(raw: unknown): string | null {
   const s = String(raw).trim();
   return s.length > 0 ? s : null;
 }
+
+const QUOTA_EXCEEDED_MSG =
+  "今日报告次数已达上限，需要升级会员才能继续使用。";
 
 const initialState: AnalysisState = {
   stockName: "",
@@ -15,6 +19,7 @@ const initialState: AnalysisState = {
   complete: null,
   loading: false,
   error: null,
+  errorCode: null,
 };
 
 export function useAnalysis() {
@@ -34,7 +39,8 @@ export function useAnalysis() {
     const params = new URLSearchParams();
     params.set("window_years", String(windowYears));
     const eventSource = new EventSource(
-      `/api/analyze/${encodeURIComponent(code)}?${params.toString()}`
+      `/api/analyze/${encodeURIComponent(code)}?${params.toString()}`,
+      { withCredentials: true },
     );
 
     eventSource.addEventListener("step", (e: MessageEvent) => {
@@ -64,16 +70,27 @@ export function useAnalysis() {
         stockName: data.stock_name,
         industry:
           normalizeIndustry(data.industry) ?? prev.industry,
+        error: null,
+        errorCode: null,
       }));
       eventSource.close();
     });
 
-    eventSource.addEventListener("error", (e: MessageEvent) => {
+    // Use a non-reserved SSE event name. Browser EventSource treats `event: error`
+    // as conflicting with connection-level `error` (no MessageEvent.data), so
+    // application errors are sent as `analysis_error` instead.
+    eventSource.addEventListener("analysis_error", (e: MessageEvent) => {
       if (e.data) {
-        const event = JSON.parse(e.data);
+        const event = JSON.parse(e.data) as {
+          error?: string;
+          error_code?: string;
+        };
+        const isQuota = event.error_code === "quota_exceeded";
+        const msg = isQuota ? QUOTA_EXCEEDED_MSG : event.error || "分析过程中出错";
         setState((prev) => ({
           ...prev,
-          error: event.error || "分析过程中出错",
+          error: msg,
+          errorCode: isQuota ? "quota_exceeded" : (event.error_code ?? null),
           loading: false,
         }));
       }
@@ -81,6 +98,39 @@ export function useAnalysis() {
     });
 
     eventSource.onerror = () => {
+      void apiFetch("/api/auth/session")
+        .then(async (r) => {
+          if (!r.ok) return;
+          const j = (await r.json()) as {
+            auth_required?: boolean;
+            authenticated?: boolean;
+            report_daily_limit?: number | null;
+            report_used_today?: number;
+          };
+          if (j.auth_required && !j.authenticated) {
+            window.dispatchEvent(new CustomEvent("app:unauthorized"));
+          }
+          const lim = j.report_daily_limit;
+          const used = j.report_used_today;
+          if (
+            lim != null &&
+            typeof used === "number" &&
+            used >= lim
+          ) {
+            setState((prev) => {
+              if (!prev.loading) return prev;
+              return {
+                ...prev,
+                loading: false,
+                error: QUOTA_EXCEEDED_MSG,
+                errorCode: "quota_exceeded",
+              };
+            });
+            return;
+          }
+        })
+        .catch(() => {});
+
       setState((prev) => {
         if (prev.loading) {
           return { ...prev, loading: false };
@@ -102,5 +152,9 @@ export function useAnalysis() {
     setState(initialState);
   }, []);
 
-  return { state, startAnalysis, reset };
+  const clearError = useCallback(() => {
+    setState((prev) => ({ ...prev, error: null, errorCode: null }));
+  }, []);
+
+  return { state, startAnalysis, reset, clearError };
 }

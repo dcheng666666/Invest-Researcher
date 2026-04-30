@@ -1,17 +1,54 @@
+import type { ReactNode } from "react";
 import { BarChart3 } from "lucide-react";
-import { Routes, Route, Outlet, Link } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Outlet,
+  Link,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import ReportPage from "./pages/ReportPage";
 import ValuationScreenPage from "./pages/ValuationScreenPage";
+import LoginPage from "./pages/LoginPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import HistorySidebar from "./components/HistorySidebar";
+import UserProfileMenu from "./components/UserProfileMenu";
 import { useHistory } from "./hooks/useHistory";
+import { useAuth } from "./context/AuthContext";
 
 export interface OutletContext {
   addHistoryItem: (symbol: string, code: string, name: string) => void;
 }
 
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { ready, authRequired, authenticated } = useAuth();
+  const location = useLocation();
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 text-sm">
+        加载中…
+      </div>
+    );
+  }
+
+  if (authRequired && !authenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  return <>{children}</>;
+}
+
 function Layout() {
   const { items, addItem, removeItem, clearAll } = useHistory();
+  const {
+    authEnabled,
+    authenticated,
+    isAdmin,
+    valuationAllowed,
+  } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex flex-col">
@@ -35,12 +72,31 @@ function Layout() {
             >
               分析首页
             </Link>
-            <Link
-              to="/valuation-screen"
-              className="text-slate-600 hover:text-slate-900 font-medium"
-            >
-              估值筛选
-            </Link>
+            {valuationAllowed && (
+              <Link
+                to="/valuation-screen"
+                className="text-slate-600 hover:text-slate-900 font-medium"
+              >
+                估值筛选
+              </Link>
+            )}
+            {authEnabled && !authenticated && (
+              <Link
+                to="/login"
+                className="text-slate-600 hover:text-slate-900 font-medium"
+              >
+                登录 / 升级
+              </Link>
+            )}
+            {authEnabled && authenticated && isAdmin && (
+              <Link
+                to="/admin/users"
+                className="text-slate-600 hover:text-slate-900 font-medium"
+              >
+                用户管理
+              </Link>
+            )}
+            {authEnabled && authenticated && <UserProfileMenu />}
           </nav>
         </div>
       </header>
@@ -64,10 +120,18 @@ function Layout() {
 function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<HomePage />} />
         <Route path="analysis-report/:symbol" element={<ReportPage />} />
         <Route path="valuation-screen" element={<ValuationScreenPage />} />
+        <Route path="admin/users" element={<AdminUsersPage />} />
       </Route>
     </Routes>
   );

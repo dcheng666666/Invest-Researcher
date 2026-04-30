@@ -43,6 +43,7 @@ export interface StepEvent {
   status: "running" | "completed" | "error";
   data?: StepData;
   error?: string;
+  error_code?: string;
 }
 
 export interface CompleteEvent {
@@ -63,6 +64,8 @@ export interface AnalysisState {
   complete: CompleteEvent | null;
   loading: boolean;
   error: string | null;
+  /** Terminal failure code from SSE when present (e.g. ``quota_exceeded``). */
+  errorCode: string | null;
 }
 
 export interface HistoryItem {

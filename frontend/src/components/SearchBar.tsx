@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
+import { apiFetch } from "../lib/api";
 import type { StockSearchResult } from "../types";
 
 interface Props {
@@ -30,9 +31,9 @@ export default function SearchBar({ onSelect, disabled }: Props) {
     setLoading(true);
     timerRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/search?q=${encodeURIComponent(query.trim())}`,
-          { signal: ac.signal }
+          { signal: ac.signal },
         );
         if (!res.ok) {
           setResults([]);
