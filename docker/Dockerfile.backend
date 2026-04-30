@@ -5,7 +5,7 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 
 COPY pyproject.toml uv.lock ./
-COPY frontend/README.md frontend/README.md
+COPY README.md README.md
 COPY backend ./backend
 COPY scripts ./scripts
 

@@ -1,0 +1,35 @@
+# Production stack: Nginx (static + /api proxy) + FastAPI backend.
+# Copy .env from .env.example and set secrets before first deploy.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Data: named volumes persist SQLite (data/) and disk cache (.cache/).
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    env_file:
+      - path: .env
+        required: false
+    expose:
+      - "8000"
+    volumes:
+      - app_data:/app/data
+      - app_cache:/app/.cache
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend.prod
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  app_cache:
