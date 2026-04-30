@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.application.analysis.step_registry import STEP_CONFIGS
+from backend.domain.verdict import Verdict
 
 
 def overall_score(scores: list[int]) -> float:
@@ -21,3 +22,38 @@ def overall_score(scores: list[int]) -> float:
     if not contributing:
         return 0.0
     return round(sum(contributing) / len(contributing), 1)
+
+
+def overall_verdict_from_mean(overall: float | None) -> str | None:
+    """Map mean overall score (0..5) to the same verdict enum used by steps."""
+    if overall is None:
+        return None
+    x = float(overall)
+    if x >= 4.5:
+        return Verdict.EXCELLENT.value
+    if x >= 3.5:
+        return Verdict.GOOD.value
+    if x >= 2.5:
+        return Verdict.NEUTRAL.value
+    if x >= 1.5:
+        return Verdict.WARNING.value
+    return Verdict.DANGER.value
+
+
+def overall_verdict_sql_predicate(verdict_normalized: str) -> str | None:
+    """SQLite boolean on ``overall_score`` matching ``overall_verdict_from_mean`` bands."""
+    v = verdict_normalized.strip().lower()
+    bands: dict[str, str] = {
+        Verdict.EXCELLENT.value: "(overall_score IS NOT NULL AND overall_score >= 4.5)",
+        Verdict.GOOD.value: (
+            "(overall_score IS NOT NULL AND overall_score >= 3.5 AND overall_score < 4.5)"
+        ),
+        Verdict.NEUTRAL.value: (
+            "(overall_score IS NOT NULL AND overall_score >= 2.5 AND overall_score < 3.5)"
+        ),
+        Verdict.WARNING.value: (
+            "(overall_score IS NOT NULL AND overall_score >= 1.5 AND overall_score < 2.5)"
+        ),
+        Verdict.DANGER.value: "(overall_score IS NOT NULL AND overall_score < 1.5)",
+    }
+    return bands.get(v)

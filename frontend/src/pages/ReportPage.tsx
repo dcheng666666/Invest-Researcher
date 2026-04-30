@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import { useAnalysis } from "../hooks/useAnalysis";
 import AnalysisReport from "../components/AnalysisReport";
@@ -8,24 +8,7 @@ import type { OutletContext } from "../App";
 
 const WINDOW_YEARS_STORAGE_KEY = "analysis_window_years";
 const WINDOW_YEAR_OPTIONS = [3, 5, 7, 10, 12, 15, 20] as const;
-
-function readStoredWindowYears(): number {
-  try {
-    const raw = localStorage.getItem(WINDOW_YEARS_STORAGE_KEY);
-    if (raw) {
-      const n = parseInt(raw, 10);
-      if (
-        !Number.isNaN(n) &&
-        (WINDOW_YEAR_OPTIONS as readonly number[]).includes(n)
-      ) {
-        return n;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return 10;
-}
+const DEFAULT_WINDOW_YEARS = 10;
 
 function parseSymbol(symbol: string): { market: string; code: string } | null {
   const match = symbol.match(/^(sh|sz|hk)(\d+)$/i);
@@ -38,11 +21,25 @@ export default function ReportPage() {
   const navigate = useNavigate();
   const { addHistoryItem } = useOutletContext<OutletContext>();
   const { state, startAnalysis, reset } = useAnalysis();
-  const [windowYears, setWindowYears] = useState(readStoredWindowYears);
+  const [windowYears, setWindowYears] = useState(DEFAULT_WINDOW_YEARS);
   const committedAnalysisKeyRef = useRef<string>("");
   const savedRef = useRef<string>("");
 
   const parsed = symbol ? parseSymbol(symbol) : null;
+
+  // Reset window before analysis effect runs so the first fetch uses 10 years.
+  useLayoutEffect(() => {
+    if (!symbol) return;
+    setWindowYears(DEFAULT_WINDOW_YEARS);
+    try {
+      localStorage.setItem(
+        WINDOW_YEARS_STORAGE_KEY,
+        String(DEFAULT_WINDOW_YEARS),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [symbol]);
 
   useEffect(() => {
     if (!parsed) return;

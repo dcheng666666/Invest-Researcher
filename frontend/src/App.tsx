@@ -1,7 +1,8 @@
 import { BarChart3 } from "lucide-react";
-import { Routes, Route, Outlet } from "react-router-dom";
+import { Routes, Route, Outlet, Link } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import ReportPage from "./pages/ReportPage";
+import ValuationScreenPage from "./pages/ValuationScreenPage";
 import HistorySidebar from "./components/HistorySidebar";
 import { useHistory } from "./hooks/useHistory";
 
@@ -15,16 +16,32 @@ function Layout() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex flex-col">
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-full px-4 py-4 flex items-center gap-3">
-          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
-            <BarChart3 className="w-5 h-5 text-white" />
+        <div className="max-w-full px-4 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
+              <BarChart3 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900">
+                价值投资五步法
+              </h1>
+              <p className="text-xs text-slate-500">股市企业深度基本面分析</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">
-              价值投资五步法
-            </h1>
-            <p className="text-xs text-slate-500">股市企业深度基本面分析</p>
-          </div>
+          <nav className="flex items-center gap-4 text-sm shrink-0">
+            <Link
+              to="/"
+              className="text-slate-600 hover:text-slate-900 font-medium"
+            >
+              分析首页
+            </Link>
+            <Link
+              to="/valuation-screen"
+              className="text-slate-600 hover:text-slate-900 font-medium"
+            >
+              估值筛选
+            </Link>
+          </nav>
         </div>
       </header>
 
@@ -50,6 +67,7 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="analysis-report/:symbol" element={<ReportPage />} />
+        <Route path="valuation-screen" element={<ValuationScreenPage />} />
       </Route>
     </Routes>
   );
