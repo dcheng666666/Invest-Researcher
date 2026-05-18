@@ -17,6 +17,24 @@ DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "stock_symbols.db"
 
 _empty_db_warned = False
 
+# Valuation batch scripts / API: separate calendars per (refresh_date, scan_scope).
+SCAN_SCOPE_STAR_CHINEXT = "star_chinext"
+SCAN_SCOPE_STAR = "star"
+SCAN_SCOPE_CHINEXT = "chinext"
+SCAN_SCOPE_SH_MAIN = "sh_main"
+SCAN_SCOPE_SZ_MAIN = "sz_main"
+SCAN_SCOPE_HK = "hk"
+VALID_SCAN_SCOPES: frozenset[str] = frozenset(
+    {
+        SCAN_SCOPE_STAR_CHINEXT,
+        SCAN_SCOPE_STAR,
+        SCAN_SCOPE_CHINEXT,
+        SCAN_SCOPE_SH_MAIN,
+        SCAN_SCOPE_SZ_MAIN,
+        SCAN_SCOPE_HK,
+    }
+)
+
 DDL = """
 CREATE TABLE IF NOT EXISTS stock_symbols (
     market TEXT NOT NULL,
@@ -38,14 +56,17 @@ CREATE TABLE IF NOT EXISTS industry_benchmarks (
 );
 
 CREATE TABLE IF NOT EXISTS valuation_screen_runs (
-    refresh_date TEXT NOT NULL PRIMARY KEY,
+    refresh_date TEXT NOT NULL,
+    scan_scope TEXT NOT NULL DEFAULT 'star_chinext',
     started_at TEXT NOT NULL,
     finished_at TEXT,
-    notes TEXT
+    notes TEXT,
+    PRIMARY KEY (refresh_date, scan_scope)
 );
 
 CREATE TABLE IF NOT EXISTS valuation_screen_rows (
     refresh_date TEXT NOT NULL,
+    scan_scope TEXT NOT NULL DEFAULT 'star_chinext',
     market TEXT NOT NULL,
     code TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -60,14 +81,14 @@ CREATE TABLE IF NOT EXISTS valuation_screen_rows (
     errors_json TEXT NOT NULL,
     scores_json TEXT NOT NULL,
     error TEXT,
-    PRIMARY KEY (refresh_date, market, code)
+    PRIMARY KEY (refresh_date, scan_scope, market, code)
 );
-CREATE INDEX IF NOT EXISTS idx_val_screen_rows_date_board
-    ON valuation_screen_rows(refresh_date, board);
-CREATE INDEX IF NOT EXISTS idx_val_screen_rows_overall
-    ON valuation_screen_rows(refresh_date, overall_score);
-CREATE INDEX IF NOT EXISTS idx_val_screen_rows_val_score
-    ON valuation_screen_rows(refresh_date, valuation_score);
+CREATE INDEX IF NOT EXISTS idx_val_screen_rows_dscope_board
+    ON valuation_screen_rows(refresh_date, scan_scope, board);
+CREATE INDEX IF NOT EXISTS idx_val_screen_rows_dscope_overall
+    ON valuation_screen_rows(refresh_date, scan_scope, overall_score);
+CREATE INDEX IF NOT EXISTS idx_val_screen_rows_dscope_val_score
+    ON valuation_screen_rows(refresh_date, scan_scope, valuation_score);
 CREATE INDEX IF NOT EXISTS idx_val_screen_rows_name
     ON valuation_screen_rows(name);
 CREATE INDEX IF NOT EXISTS idx_val_screen_rows_code
@@ -114,7 +135,91 @@ def _migrate_users_membership_tier(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_valuation_screening_scan_scope(conn: sqlite3.Connection) -> None:
+    """Add ``scan_scope`` so STAR/ChiNext and SZ main-board runs can share a calendar day."""
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='valuation_screen_rows'"
+    )
+    if cur.fetchone() is None:
+        return
+    cur_runs = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='valuation_screen_runs'"
+    )
+    if cur_runs.fetchone() is None:
+        return
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(valuation_screen_rows)").fetchall()]
+    if "scan_scope" in cols:
+        return
+    logger.info("Migrating valuation_screen_* tables to add scan_scope")
+    conn.executescript(
+        """
+        BEGIN IMMEDIATE;
+        CREATE TABLE valuation_screen_runs_mig (
+            refresh_date TEXT NOT NULL,
+            scan_scope TEXT NOT NULL DEFAULT 'star_chinext',
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            notes TEXT,
+            PRIMARY KEY (refresh_date, scan_scope)
+        );
+        INSERT INTO valuation_screen_runs_mig (
+            refresh_date, scan_scope, started_at, finished_at, notes
+        )
+        SELECT refresh_date, 'star_chinext', started_at, finished_at, notes
+        FROM valuation_screen_runs;
+        DROP TABLE valuation_screen_runs;
+        ALTER TABLE valuation_screen_runs_mig RENAME TO valuation_screen_runs;
+
+        CREATE TABLE valuation_screen_rows_mig (
+            refresh_date TEXT NOT NULL,
+            scan_scope TEXT NOT NULL DEFAULT 'star_chinext',
+            market TEXT NOT NULL,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            board TEXT NOT NULL,
+            overall_score REAL,
+            valuation_score INTEGER,
+            valuation_verdict TEXT,
+            pe_percentile REAL,
+            peg REAL,
+            current_pe REAL,
+            results_json TEXT NOT NULL,
+            errors_json TEXT NOT NULL,
+            scores_json TEXT NOT NULL,
+            error TEXT,
+            PRIMARY KEY (refresh_date, scan_scope, market, code)
+        );
+        INSERT INTO valuation_screen_rows_mig (
+            refresh_date, scan_scope, market, code, name, board,
+            overall_score, valuation_score, valuation_verdict,
+            pe_percentile, peg, current_pe,
+            results_json, errors_json, scores_json, error
+        )
+        SELECT refresh_date, 'star_chinext', market, code, name, board,
+            overall_score, valuation_score, valuation_verdict,
+            pe_percentile, peg, current_pe,
+            results_json, errors_json, scores_json, error
+        FROM valuation_screen_rows;
+        DROP TABLE valuation_screen_rows;
+        ALTER TABLE valuation_screen_rows_mig RENAME TO valuation_screen_rows;
+
+        CREATE INDEX IF NOT EXISTS idx_val_screen_rows_dscope_board
+            ON valuation_screen_rows(refresh_date, scan_scope, board);
+        CREATE INDEX IF NOT EXISTS idx_val_screen_rows_dscope_overall
+            ON valuation_screen_rows(refresh_date, scan_scope, overall_score);
+        CREATE INDEX IF NOT EXISTS idx_val_screen_rows_dscope_val_score
+            ON valuation_screen_rows(refresh_date, scan_scope, valuation_score);
+        CREATE INDEX IF NOT EXISTS idx_val_screen_rows_name
+            ON valuation_screen_rows(name);
+        CREATE INDEX IF NOT EXISTS idx_val_screen_rows_code
+            ON valuation_screen_rows(code);
+        COMMIT;
+        """
+    )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
+    _migrate_valuation_screening_scan_scope(conn)
     conn.executescript(DDL)
     _migrate_users_membership_tier(conn)
 
@@ -289,7 +394,7 @@ def replace_all_industry_benchmarks(
 
 
 # --------------------------------------------------------------------------- #
-# STAR / ChiNext universe + valuation screening (same SQLite file)
+# STAR / ChiNext + SZ main-board screening (same SQLite file)
 # --------------------------------------------------------------------------- #
 
 
@@ -331,8 +436,49 @@ def list_star_chinext_symbols(db_path: Path | None = None) -> list[dict[str, str
     return out
 
 
+def classify_sz_main_board(market: str, code: str) -> str | None:
+    """Shenzhen main board (incl. former SME): ``000`` / ``001`` / ``002`` prefixes."""
+    m = str(market).strip().upper()
+    c = str(code).strip()
+    if m != "SZ":
+        return None
+    if c.startswith(("000", "001", "002")):
+        return "SZ_MAIN"
+    return None
+
+
+def list_sz_main_board_symbols(db_path: Path | None = None) -> list[dict[str, str]]:
+    """SZ main-board listings from ``stock_symbols`` (excludes ChiNext ``300``/``301``)."""
+    path = db_path or DEFAULT_DB_PATH
+    if not path.is_file():
+        return []
+
+    conn = sqlite3.connect(str(path))
+    try:
+        init_db(conn)
+        cur = conn.execute(
+            "SELECT market, code, name FROM stock_symbols WHERE "
+            "market = 'SZ' AND ("
+            "code GLOB '000*' OR code GLOB '001*' OR code GLOB '002*'"
+            ") ORDER BY code"
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    out: list[dict[str, str]] = []
+    for r in rows:
+        m, c, n = str(r[0]), str(r[1]).strip(), str(r[2]).strip()
+        if classify_sz_main_board(m, c):
+            out.append({"market": m, "code": c, "name": n})
+    return out
+
+
 def get_valuation_run(
-    refresh_date: str, db_path: Path | None = None
+    refresh_date: str,
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
 ) -> dict[str, Any] | None:
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
@@ -340,14 +486,15 @@ def get_valuation_run(
     d = str(refresh_date).strip()
     if not d:
         return None
+    scope = str(scan_scope).strip()
 
     conn = sqlite3.connect(str(path))
     try:
         init_db(conn)
         cur = conn.execute(
-            "SELECT refresh_date, started_at, finished_at, notes "
-            "FROM valuation_screen_runs WHERE refresh_date = ?",
-            (d,),
+            "SELECT refresh_date, scan_scope, started_at, finished_at, notes "
+            "FROM valuation_screen_runs WHERE refresh_date = ? AND scan_scope = ?",
+            (d, scope),
         )
         row = cur.fetchone()
     finally:
@@ -357,9 +504,10 @@ def get_valuation_run(
         return None
     return {
         "refresh_date": str(row[0]),
-        "started_at": str(row[1]),
-        "finished_at": None if row[2] is None else str(row[2]),
-        "notes": None if row[3] is None else str(row[3]),
+        "scan_scope": str(row[1]),
+        "started_at": str(row[2]),
+        "finished_at": None if row[3] is None else str(row[3]),
+        "notes": None if row[4] is None else str(row[4]),
     }
 
 
@@ -367,6 +515,7 @@ def ensure_valuation_run_started(
     refresh_date: str,
     started_at: str,
     *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
     notes: str | None = None,
     db_path: Path | None = None,
 ) -> None:
@@ -378,15 +527,21 @@ def ensure_valuation_run_started(
         init_db(conn)
         conn.execute(
             "INSERT OR IGNORE INTO valuation_screen_runs "
-            "(refresh_date, started_at, finished_at, notes) VALUES (?, ?, NULL, ?)",
-            (str(refresh_date).strip(), started_at, notes),
+            "(refresh_date, scan_scope, started_at, finished_at, notes) "
+            "VALUES (?, ?, ?, NULL, ?)",
+            (str(refresh_date).strip(), str(scan_scope).strip(), started_at, notes),
         )
         conn.commit()
     finally:
         conn.close()
 
 
-def mark_valuation_run_finished(refresh_date: str, db_path: Path | None = None) -> None:
+def mark_valuation_run_finished(
+    refresh_date: str,
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
+) -> None:
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
         return
@@ -395,8 +550,9 @@ def mark_valuation_run_finished(refresh_date: str, db_path: Path | None = None) 
     try:
         init_db(conn)
         conn.execute(
-            "UPDATE valuation_screen_runs SET finished_at = ? WHERE refresh_date = ?",
-            (finished, str(refresh_date).strip()),
+            "UPDATE valuation_screen_runs SET finished_at = ? "
+            "WHERE refresh_date = ? AND scan_scope = ?",
+            (finished, str(refresh_date).strip(), str(scan_scope).strip()),
         )
         conn.commit()
     finally:
@@ -404,7 +560,10 @@ def mark_valuation_run_finished(refresh_date: str, db_path: Path | None = None) 
 
 
 def valuation_codes_done_for_date(
-    refresh_date: str, db_path: Path | None = None
+    refresh_date: str,
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
 ) -> set[tuple[str, str]]:
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
@@ -413,8 +572,9 @@ def valuation_codes_done_for_date(
     try:
         init_db(conn)
         cur = conn.execute(
-            "SELECT market, code FROM valuation_screen_rows WHERE refresh_date = ?",
-            (str(refresh_date).strip(),),
+            "SELECT market, code FROM valuation_screen_rows "
+            "WHERE refresh_date = ? AND scan_scope = ?",
+            (str(refresh_date).strip(), str(scan_scope).strip()),
         )
         rows = cur.fetchall()
     finally:
@@ -447,6 +607,7 @@ def dumps_analysis_payload(
 def insert_valuation_screen_row(
     *,
     refresh_date: str,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
     market: str,
     code: str,
     name: str,
@@ -465,13 +626,14 @@ def insert_valuation_screen_row(
 ) -> None:
     conn.execute(
         "INSERT INTO valuation_screen_rows ("
-        "refresh_date, market, code, name, board, "
+        "refresh_date, scan_scope, market, code, name, board, "
         "overall_score, valuation_score, valuation_verdict, "
         "pe_percentile, peg, current_pe, "
         "results_json, errors_json, scores_json, error"
-        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             str(refresh_date).strip(),
+            str(scan_scope).strip(),
             str(market).strip(),
             str(code).strip(),
             str(name).strip(),
@@ -490,17 +652,23 @@ def insert_valuation_screen_row(
     )
 
 
-def get_latest_completed_refresh_date(db_path: Path | None = None) -> str | None:
+def get_latest_completed_refresh_date(
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
+) -> str | None:
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
         return None
+    scope = str(scan_scope).strip()
     conn = sqlite3.connect(str(path))
     try:
         init_db(conn)
         cur = conn.execute(
             "SELECT refresh_date FROM valuation_screen_runs "
-            "WHERE finished_at IS NOT NULL "
-            "ORDER BY refresh_date DESC LIMIT 1"
+            "WHERE finished_at IS NOT NULL AND scan_scope = ? "
+            "ORDER BY refresh_date DESC LIMIT 1",
+            (scope,),
         )
         row = cur.fetchone()
     finally:
@@ -508,15 +676,23 @@ def get_latest_completed_refresh_date(db_path: Path | None = None) -> str | None
     return None if not row else str(row[0])
 
 
-def get_latest_refresh_date_with_any_rows(db_path: Path | None = None) -> str | None:
-    """Latest ``refresh_date`` that has at least one screening row (includes partial runs)."""
+def get_latest_refresh_date_with_any_rows(
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
+) -> str | None:
+    """Latest ``refresh_date`` with at least one row for this ``scan_scope``."""
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
         return None
+    scope = str(scan_scope).strip()
     conn = sqlite3.connect(str(path))
     try:
         init_db(conn)
-        cur = conn.execute("SELECT MAX(refresh_date) FROM valuation_screen_rows")
+        cur = conn.execute(
+            "SELECT MAX(refresh_date) FROM valuation_screen_rows WHERE scan_scope = ?",
+            (scope,),
+        )
         row = cur.fetchone()
     finally:
         conn.close()
@@ -525,28 +701,38 @@ def get_latest_refresh_date_with_any_rows(db_path: Path | None = None) -> str | 
     return str(row[0])
 
 
-def get_default_valuation_screen_refresh_date(db_path: Path | None = None) -> str | None:
-    """Default list date: last closed run, else any date that already has stored rows."""
-    closed = get_latest_completed_refresh_date(db_path)
+def get_default_valuation_screen_refresh_date(
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
+) -> str | None:
+    """Default list date: last closed run, else any date with rows for this scope."""
+    closed = get_latest_completed_refresh_date(scan_scope=scan_scope, db_path=db_path)
     if closed:
         return closed
-    return get_latest_refresh_date_with_any_rows(db_path)
+    return get_latest_refresh_date_with_any_rows(
+        scan_scope=scan_scope, db_path=db_path
+    )
 
 
 def list_refresh_dates_with_completed_runs(
-    limit: int = 30, db_path: Path | None = None
+    limit: int = 30,
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
 ) -> list[str]:
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
         return []
+    scope = str(scan_scope).strip()
     conn = sqlite3.connect(str(path))
     try:
         init_db(conn)
         cur = conn.execute(
             "SELECT refresh_date FROM valuation_screen_runs "
-            "WHERE finished_at IS NOT NULL "
+            "WHERE finished_at IS NOT NULL AND scan_scope = ? "
             "ORDER BY refresh_date DESC LIMIT ?",
-            (limit,),
+            (scope, limit),
         )
         rows = cur.fetchall()
     finally:
@@ -555,19 +741,24 @@ def list_refresh_dates_with_completed_runs(
 
 
 def list_refresh_dates_having_rows(
-    limit: int = 30, db_path: Path | None = None
+    limit: int = 30,
+    *,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
+    db_path: Path | None = None,
 ) -> list[str]:
-    """Distinct ``refresh_date`` values that have screening rows (partial or complete)."""
+    """Distinct ``refresh_date`` with screening rows for this ``scan_scope``."""
     path = db_path or DEFAULT_DB_PATH
     if not path.is_file():
         return []
+    scope = str(scan_scope).strip()
     conn = sqlite3.connect(str(path))
     try:
         init_db(conn)
         cur = conn.execute(
             "SELECT DISTINCT refresh_date FROM valuation_screen_rows "
+            "WHERE scan_scope = ? "
             "ORDER BY refresh_date DESC LIMIT ?",
-            (limit,),
+            (scope, limit),
         )
         rows = cur.fetchall()
     finally:
@@ -578,6 +769,7 @@ def list_refresh_dates_having_rows(
 def query_valuation_screen_rows(
     *,
     refresh_date: str,
+    scan_scope: str = SCAN_SCOPE_STAR_CHINEXT,
     board: str | None = None,
     overall_verdict_sql: str | None = None,
     step_score_bounds: list[tuple[int | None, int | None]] | None = None,
@@ -591,8 +783,9 @@ def query_valuation_screen_rows(
         return [], 0
 
     rd = str(refresh_date).strip()
-    where: list[str] = ["refresh_date = ?"]
-    params: list[Any] = [rd]
+    scope = str(scan_scope).strip()
+    where: list[str] = ["refresh_date = ?", "scan_scope = ?"]
+    params: list[Any] = [rd, scope]
 
     if board and board.upper() not in ("ALL", ""):
         where.append("board = ?")

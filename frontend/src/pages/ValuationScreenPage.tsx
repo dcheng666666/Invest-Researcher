@@ -61,12 +61,14 @@ function stepScoreAt(
 
 interface ListResponse {
   refresh_date: string | null;
+  scan_scope: string;
   total: number;
   items: ValuationScreenRow[];
   completed_refresh_dates: string[];
 }
 
 interface MetaResponse {
+  scan_scope: string;
   latest_completed_refresh_date: string | null;
   completed_refresh_dates: string[];
 }
@@ -130,6 +132,9 @@ function SortableTh({
 function boardLabel(board: string): string {
   if (board === "STAR") return "科创板";
   if (board === "CHINEXT") return "创业板";
+  if (board === "SH_MAIN") return "沪市主板";
+  if (board === "SZ_MAIN") return "深圳主板";
+  if (board === "HK_MAIN") return "港股主板";
   return board;
 }
 
@@ -142,6 +147,7 @@ export default function ValuationScreenPage() {
 
   /** Empty: use API default (latest completed refresh_date). */
   const [refreshDate, setRefreshDate] = useState("");
+  const [scanScope, setScanScope] = useState("chinext");
   const [board, setBoard] = useState("all");
   const [overallVerdict, setOverallVerdict] = useState<VerdictOpt>("");
   const [stepMin, setStepMin] = useState<string[]>(["", "", "", "", ""]);
@@ -190,17 +196,20 @@ export default function ValuationScreenPage() {
   }, []);
 
   const loadMeta = useCallback(async () => {
-    const res = await apiFetch("/api/valuation-screen/meta");
+    const params = new URLSearchParams();
+    params.set("scan_scope", scanScope);
+    const res = await apiFetch(`/api/valuation-screen/meta?${params.toString()}`);
     if (!res.ok) throw new Error(`meta ${res.status}`);
     const j = (await res.json()) as MetaResponse;
     setMeta(j);
-  }, []);
+  }, [scanScope]);
 
   const loadList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
+      params.set("scan_scope", scanScope);
       const rd = refreshDate.trim();
       if (rd) {
         params.set("refresh_date", rd);
@@ -228,7 +237,7 @@ export default function ValuationScreenPage() {
     } finally {
       setLoading(false);
     }
-  }, [refreshDate, board, overallVerdict, stepBoundsKey, sort, offset]);
+  }, [refreshDate, scanScope, board, overallVerdict, stepBoundsKey, sort, offset]);
 
   useEffect(() => {
     if (!ready || !valuationAllowed) {
@@ -250,6 +259,7 @@ export default function ValuationScreenPage() {
 
   const hasActiveValuationFilters =
     refreshDate.trim() !== "" ||
+    scanScope !== "chinext" ||
     board !== "all" ||
     overallVerdict !== "" ||
     stepMin.some((s) => s.trim() !== "") ||
@@ -292,7 +302,8 @@ export default function ValuationScreenPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900">估值筛选报表</h2>
           <p className="text-sm text-slate-500 mt-1">
-            数据来自批量脚本写入的 SQLite；默认展示最近已完成的一轮自然日 refresh。
+            数据来自批量脚本；按「扫描范围」区分沪市主板、深市主板、科创板、创业板与港股，可与自然日 refresh
+            组合查看。
           </p>
         </div>
         <Link
@@ -305,6 +316,24 @@ export default function ValuationScreenPage() {
 
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
+            扫描范围
+            <select
+              className="border border-slate-200 rounded-lg px-2 py-2 text-sm text-slate-900"
+              value={scanScope}
+              onChange={(e) => {
+                setScanScope(e.target.value);
+                setRefreshDate("");
+                setOffset(0);
+              }}
+            >
+              <option value="sh_main">沪市主板 (600/601/603/605)</option>
+              <option value="sz_main">深市主板 (000/001/002)</option>
+              <option value="star">科创板 (688)</option>
+              <option value="chinext">创业板 (300/301)</option>
+              <option value="hk">港股 (HK)</option>
+            </select>
+          </label>
           <label className="flex flex-col gap-1 text-xs text-slate-600">
             数据日期
             <select
@@ -334,8 +363,11 @@ export default function ValuationScreenPage() {
               }}
             >
               <option value="all">全部</option>
+              <option value="SH_MAIN">沪市主板</option>
               <option value="STAR">科创板</option>
               <option value="CHINEXT">创业板</option>
+              <option value="SZ_MAIN">深圳主板</option>
+              <option value="HK_MAIN">港股主板</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-slate-600">
@@ -423,7 +455,9 @@ export default function ValuationScreenPage() {
       {data && (
         <>
           <p className="text-sm text-slate-600">
-            当前数据日{" "}
+            扫描范围{" "}
+            <span className="font-mono font-medium">{data.scan_scope}</span>
+            ，数据日{" "}
             <span className="font-mono font-medium">
               {data.refresh_date ?? "—"}
             </span>

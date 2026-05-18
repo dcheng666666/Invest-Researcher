@@ -63,13 +63,15 @@ class ValuationScreenListResponse(BaseModel):
     """Paginated screening list with resolved refresh date."""
 
     refresh_date: str | None
+    scan_scope: str
     total: int
     items: list[ValuationScreenRowItem]
     completed_refresh_dates: list[str] = []
 
 
 class ValuationScreenMetaResponse(BaseModel):
-    """Latest completed refresh; ``completed_refresh_dates`` lists days that have row data (partial or complete)."""
+    """Latest completed refresh for the requested ``scan_scope``; dates list row data for that scope."""
 
+    scan_scope: str
     latest_completed_refresh_date: str | None
     completed_refresh_dates: list[str]
