@@ -29,52 +29,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
           prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            Please perform a comprehensive code review on the changes in this pull request.
+            Focus on potential bugs, security issues, and architectural design.
+            Submit your feedback as a structured Markdown review comment on the PR.
+          claude_args: "--max-turns 3"
 
-            Additional review rules:
-            - Prioritize correctness and behavior regressions over style suggestions.
-            - Flag risky assumptions, edge cases, and missing input validation.
-            - Call out security concerns (auth, data exposure, injection, secrets handling).
-            - Check for performance risks when data volume or loops are involved.
-            - Identify missing tests and suggest concrete test cases.
-            - Keep feedback actionable with clear remediation guidance.
-
-      - name: Render Claude review output summary
-        if: always()
-        shell: bash
-        run: |
-          if [[ ! -f claude-execution-output.json ]]; then
-            {
-              echo "## Claude Code Review Output"
-              echo ""
-              echo "- `claude-execution-output.json` not found in workspace."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          jq . claude-execution-output.json > claude-execution-output.pretty.json
-
-          {
-            echo "## Claude Code Review Output"
-            echo ""
-            echo "### Top-level keys"
-            jq -r 'keys[] | "- `\(. )`"' claude-execution-output.json
-            echo ""
-            echo "### Preview (first 120 lines)"
-            echo '```json'
-            jq -r '.' claude-execution-output.json | head -n 120
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload Claude review output artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-review-output-${{ github.run_id }}
-          path: |
-            claude-execution-output.json
-            claude-execution-output.pretty.json
-          if-no-files-found: ignore
