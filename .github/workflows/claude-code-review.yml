@@ -17,6 +17,7 @@ jobs:
   review:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    environment: AGENT
     timeout-minutes: 20
     steps:
       - name: Run Claude code review
