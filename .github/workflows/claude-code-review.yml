@@ -41,3 +41,40 @@ jobs:
             - Check for performance risks when data volume or loops are involved.
             - Identify missing tests and suggest concrete test cases.
             - Keep feedback actionable with clear remediation guidance.
+
+      - name: Render Claude review output summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -f claude-execution-output.json ]]; then
+            {
+              echo "## Claude Code Review Output"
+              echo ""
+              echo "- `claude-execution-output.json` not found in workspace."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          jq . claude-execution-output.json > claude-execution-output.pretty.json
+
+          {
+            echo "## Claude Code Review Output"
+            echo ""
+            echo "### Top-level keys"
+            jq -r 'keys[] | "- `\(. )`"' claude-execution-output.json
+            echo ""
+            echo "### Preview (first 120 lines)"
+            echo '```json'
+            jq -r '.' claude-execution-output.json | head -n 120
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Claude review output artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-review-output-${{ github.run_id }}
+          path: |
+            claude-execution-output.json
+            claude-execution-output.pretty.json
+          if-no-files-found: ignore
