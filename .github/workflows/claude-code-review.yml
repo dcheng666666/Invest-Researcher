@@ -29,9 +29,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: "claude-4-6-sonnet"
           prompt: |
             Please perform a comprehensive code review on the changes in this pull request.
             Focus on potential bugs, security issues, and architectural design.
             Submit your feedback as a structured Markdown review comment on the PR.
-          claude_args: "--max-turns 3"
 
