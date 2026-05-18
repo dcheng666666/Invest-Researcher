@@ -89,11 +89,21 @@ async def search(q: str = Query(..., min_length=1)):
 )
 async def valuation_screen_meta(
     dates_limit: int = Query(30, ge=1, le=200),
+    scan_scope: str = Query(
+        sqlite_store.SCAN_SCOPE_STAR_CHINEXT,
+        description="star_chinext | star | chinext | sh_main | sz_main | hk",
+    ),
 ):
+    if scan_scope not in sqlite_store.VALID_SCAN_SCOPES:
+        raise HTTPException(status_code=400, detail=f"Invalid scan_scope: {scan_scope}")
+
     def _load() -> ValuationScreenMetaResponse:
-        latest = sqlite_store.get_latest_completed_refresh_date()
-        dates = sqlite_store.list_refresh_dates_having_rows(limit=dates_limit)
+        latest = sqlite_store.get_latest_completed_refresh_date(scan_scope=scan_scope)
+        dates = sqlite_store.list_refresh_dates_having_rows(
+            limit=dates_limit, scan_scope=scan_scope
+        )
         return ValuationScreenMetaResponse(
+            scan_scope=scan_scope,
             latest_completed_refresh_date=latest,
             completed_refresh_dates=dates,
         )
@@ -111,7 +121,11 @@ async def valuation_screen(
         None,
         description="YYYY-MM-DD; default: latest completed refresh",
     ),
-    board: str = Query("all", description="all | STAR | CHINEXT"),
+    scan_scope: str = Query(
+        sqlite_store.SCAN_SCOPE_STAR_CHINEXT,
+        description="star_chinext | star | chinext | sh_main | sz_main | hk",
+    ),
+    board: str = Query("all", description="all | STAR | CHINEXT | SZ_MAIN"),
     overall_verdict: str | None = Query(
         None,
         description="excellent | good | neutral | warning | danger (综合分档)",
@@ -135,14 +149,20 @@ async def valuation_screen(
 ):
     sort_clauses = parse_valuation_sort_clauses(sort)
 
+    if scan_scope not in sqlite_store.VALID_SCAN_SCOPES:
+        raise HTTPException(status_code=400, detail=f"Invalid scan_scope: {scan_scope}")
+
     def _load() -> ValuationScreenListResponse:
         rd = refresh_date.strip() if refresh_date else None
         if not rd:
-            rd = sqlite_store.get_default_valuation_screen_refresh_date()
-        dates = sqlite_store.list_refresh_dates_having_rows(limit=30)
+            rd = sqlite_store.get_default_valuation_screen_refresh_date(
+                scan_scope=scan_scope
+            )
+        dates = sqlite_store.list_refresh_dates_having_rows(limit=30, scan_scope=scan_scope)
         if rd is None:
             return ValuationScreenListResponse(
                 refresh_date=None,
+                scan_scope=scan_scope,
                 total=0,
                 items=[],
                 completed_refresh_dates=dates,
@@ -163,6 +183,7 @@ async def valuation_screen(
             step_bounds = None
         rows, total = sqlite_store.query_valuation_screen_rows(
             refresh_date=rd,
+            scan_scope=scan_scope,
             board=board_arg,
             overall_verdict_sql=ov_sql,
             step_score_bounds=step_bounds,
@@ -181,6 +202,7 @@ async def valuation_screen(
         ]
         return ValuationScreenListResponse(
             refresh_date=rd,
+            scan_scope=scan_scope,
             total=total,
             items=items,
             completed_refresh_dates=dates,
